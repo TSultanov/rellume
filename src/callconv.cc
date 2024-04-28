@@ -107,8 +107,12 @@ Arch CallConv::ToArch() const {
     switch (*this) {
     default: return Arch::INVALID;
     case CallConv::X86_64_SPTR:  return Arch::X86_64;
+#ifdef RELLUME_WITH_AARCH64
     case CallConv::RV64_SPTR:    return Arch::RV64;
+#endif
+#ifdef RELLUME_WITH_RV64
     case CallConv::AArch64_SPTR: return Arch::AArch64;
+#endif
     }
 }
 
