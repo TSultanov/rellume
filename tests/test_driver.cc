@@ -1,4 +1,5 @@
 
+#include <cstdint>
 #include <rellume/rellume.h>
 
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -17,7 +18,12 @@
 #include <memory>
 #include <random>
 #include <sstream>
+#ifdef _WIN32
+#include <Windows.h>
+#include <Memoryapi.h>
+#else
 #include <sys/mman.h>
+#endif
 #include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -101,7 +107,11 @@ class TestCase {
 
     ~TestCase() {
         for (auto& map : mem_maps) {
+            #ifdef _WIN32
+            VirtualFree(map.first, 0, MEM_RELEASE);
+            #else
             munmap(map.first, map.second);
+            #endif
         }
     }
 
@@ -161,8 +171,23 @@ class TestCase {
         uintptr_t addr = std::stoul(key.substr(1), nullptr, 16);
         size_t value_len = value_str.length() / 2;
 
-        uintptr_t paged_addr = addr & -sysconf(_SC_PAGE_SIZE);
+        uintptr_t page_size;
+        #ifdef _WIN32
+        {
+            SYSTEM_INFO info;
+            GetSystemInfo(&info);
+            page_size = info.dwPageSize;
+        }
+        #else
+        page_size = sysconf(_SC_PAGE_SIZE);
+        #endif
+
+        uintptr_t paged_addr = addr & -page_size;
         size_t paged_size = value_len + (addr - paged_addr);
+        #ifdef _WIN32
+        void* map = VirtualAlloc(reinterpret_cast<void*>(paged_addr), paged_size,
+            MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        #else
         void* map = mmap(reinterpret_cast<void*>(paged_addr), paged_size,
                          PROT_READ|PROT_WRITE,
                          MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE, -1, 0);
@@ -170,6 +195,7 @@ class TestCase {
             diagnostic << "# error mapping address " << std::hex << addr << std::endl;
             return true;
         }
+        #endif
         mem_maps.push_back(std::make_pair(map, paged_size));
 
         uint8_t* buf = reinterpret_cast<uint8_t*>(addr);
