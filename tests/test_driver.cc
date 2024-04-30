@@ -356,22 +356,22 @@ class TestCase {
             auto builder = llvm::orc::LLJITBuilder();
             auto J = builder.create();
             if (!J) {
-                diagnostic << "# error: failed to create JIT";
+                diagnostic << "# error: failed to create JIT" << std::endl;
                 return true;
             }
             if(auto res = J.get()->addIRModule(std::move(tsm))) {
-                diagnostic << "# error: failed to add module\n";
+                diagnostic << "# error: failed to add module\n" << std::endl;
                 return true;
             }
 
             auto fn_addr = J.get()->lookup(fn->getName());
             if (!fn_addr) {
-                diagnostic << "# error: failed to find entry point address";
+                diagnostic << "# error: failed to find entry point address" << std::endl;
                 return true;
             }
 
             if(auto res = J.get()->initialize(J.get()->getMainJITDylib())) {
-                diagnostic << "# error: failed to initialize JIT";
+                diagnostic << "# error: failed to initialize JIT" << std::endl;
                 return true;
             }
 
