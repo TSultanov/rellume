@@ -8,6 +8,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
 
 #include <cstddef>
 #include <cstdio>
@@ -302,8 +303,8 @@ class TestCase {
         // 2. Emulate function
         CPU state = initial;
 
-        llvm::LLVMContext ctx;
-        auto mod = std::make_unique<llvm::Module>("rellume_test", ctx);
+        auto ctx = std::make_unique<llvm::LLVMContext>();
+        auto mod = std::make_unique<llvm::Module>("rellume_test", *ctx);
 
         LLConfig* rlcfg = ll_config_new();
         ll_config_enable_verify_ir(rlcfg, true);
@@ -346,36 +347,63 @@ class TestCase {
         llvm::TargetOptions options;
         options.EnableFastISel = true;
 
-        llvm::EngineBuilder builder(std::move(mod));
         // There are two options: "Interpreter" and "JIT". Because we execute
         // the code once only, the interpreter is usually faster (even compared
         // to the -O0 JIT configuration).
-        if (use_jit)
-            builder.setEngineKind(llvm::EngineKind::JIT);
-        else
-            builder.setEngineKind(llvm::EngineKind::Interpreter);
-        builder.setErrorStr(&error);
-#if LL_LLVM_MAJOR < 18
-        builder.setOptLevel(llvm::CodeGenOpt::None);
-#else
-        builder.setOptLevel(llvm::CodeGenOptLevel::None);
-#endif
-        builder.setTargetOptions(options);
+        if (use_jit) {
+            auto tsm = llvm::orc::ThreadSafeModule(std::move(mod), std::move(ctx));
 
-        if (llvm::ExecutionEngine* engine = builder.create()) {
-            // If we have a JIT compiler, get address of compiled code.
-            // Otherwise try to run the function using the interpreter.
-            const auto& name = fn->getName();
-            if (auto raw_ptr = engine->getFunctionAddress(name.str())) {
-                auto fn_ptr = reinterpret_cast<void(*)(CPU*)>(raw_ptr);
-                fn_ptr(&state);
-            } else {
-                engine->runFunction(fn, {llvm::PTOGV(&state)});
+            auto builder = llvm::orc::LLJITBuilder();
+            auto J = builder.create();
+            if (!J) {
+                diagnostic << "# error: failed to create JIT";
+                return true;
             }
-            delete engine;
+            if(auto res = J.get()->addIRModule(std::move(tsm))) {
+                diagnostic << "# error: failed to add module\n";
+                return true;
+            }
+
+            auto fn_addr = J.get()->lookup(fn->getName());
+            if (!fn_addr) {
+                diagnostic << "# error: failed to find entry point address";
+                return true;
+            }
+
+            if(auto res = J.get()->initialize(J.get()->getMainJITDylib())) {
+                diagnostic << "# error: failed to initialize JIT";
+                return true;
+            }
+
+            auto fn_ptr = fn_addr->toPtr<void (*)(CPU *)>();
+            fn_ptr(&state);
         } else {
-            diagnostic << "# error creating engine: " << error << std::endl;
-            return true;
+            llvm::EngineBuilder builder(std::move(mod));
+            builder.setEngineKind(llvm::EngineKind::Interpreter);
+
+            builder.setErrorStr(&error);
+#if LL_LLVM_MAJOR < 18
+            builder.setOptLevel(llvm::CodeGenOpt::None);
+#else
+            builder.setOptLevel(llvm::CodeGenOptLevel::None);
+#endif
+            builder.setTargetOptions(options);
+
+            if (llvm::ExecutionEngine *engine = builder.create()) {
+                // If we have a JIT compiler, get address of compiled code.
+                // Otherwise try to run the function using the interpreter.
+                const auto &name = fn->getName();
+                if (auto raw_ptr = engine->getFunctionAddress(name.str())) {
+                    auto fn_ptr = reinterpret_cast<void (*)(CPU *)>(raw_ptr);
+                    fn_ptr(&state);
+                } else {
+                    engine->runFunction(fn, {llvm::PTOGV(&state)});
+                }
+                delete engine;
+            } else {
+                diagnostic << "# error creating engine: " << error << std::endl;
+                return true;
+            }
         }
 
         // 3. Compare with expected values
