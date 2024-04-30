@@ -2,7 +2,7 @@ project('rellume', ['c', 'cpp'], meson_version: '>=0.52',
         default_options: [
             'buildtype=debugoptimized',
             'warning_level=3',
-            'cpp_std=c++17',
+            'cpp_std=c++20',
         ])
 
 if get_option('warning_level').to_int() >= 3
