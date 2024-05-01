@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "minilibc.h"
 
 #ifndef MAP_FIXED_NOREPLACE
 #define MAP_FIXED_NOREPLACE 0x100000
@@ -351,6 +352,20 @@ class TestCase {
         // the code once only, the interpreter is usually faster (even compared
         // to the -O0 JIT configuration).
         if (use_jit) {
+            std::vector<const char *> static_libs = {
+                "C:/msys64/clang64/lib/clang/18/lib/windows/libclang_rt.builtins-x86_64.a",
+                "C:/msys64/clang64/lib/libmingwex.a"
+            };
+
+            std::vector<const char *> dynamic_libs = {
+            };
+
+            auto write_fn = create_write_stub(*ctx, *mod);
+            if (llvm::verifyFunction(*write_fn, &llvm::errs())) {
+                diagnostic << "# error: IR verification failed\n";
+                return true;
+            }
+
             auto tsm = llvm::orc::ThreadSafeModule(std::move(mod), std::move(ctx));
 
             auto builder = llvm::orc::LLJITBuilder();
@@ -359,19 +374,40 @@ class TestCase {
                 diagnostic << "# error: failed to create JIT" << std::endl;
                 return true;
             }
+
+            auto& dyn_lib = J.get()->getExecutionSession().createBareJITDylib("LibCppDynLib");
+            for (auto dyn_lib_name : dynamic_libs) {
+                auto g = llvm::orc::DynamicLibrarySearchGenerator::Load(dyn_lib_name, 0);
+                if(!g) {
+                    diagnostic << "# error: failed to load library " << dyn_lib_name << std::endl;
+                    return true;
+                }
+                dyn_lib.addGenerator(std::move(g.get()));
+            }
+            J.get()->getMainJITDylib().addToLinkOrder(dyn_lib);
+
+            for (auto lib_name : static_libs) {
+                auto g = llvm::orc::StaticLibraryDefinitionGenerator::Load(J.get()->getObjLinkingLayer(), lib_name);
+                if(!g) {
+                    diagnostic << "# error: failed to load library " << lib_name << std::endl;
+                    return true;
+                }
+                J.get()->getMainJITDylib().addGenerator(std::move(g.get()));
+            }
+
             if(auto res = J.get()->addIRModule(std::move(tsm))) {
                 diagnostic << "# error: failed to add module\n" << std::endl;
+                return true;
+            }
+
+            if(auto res = J.get()->initialize(J.get()->getMainJITDylib())) {
+                diagnostic << "# error: failed to initialize JIT" << std::endl;
                 return true;
             }
 
             auto fn_addr = J.get()->lookup(fn->getName());
             if (!fn_addr) {
                 diagnostic << "# error: failed to find entry point address" << std::endl;
-                return true;
-            }
-
-            if(auto res = J.get()->initialize(J.get()->getMainJITDylib())) {
-                diagnostic << "# error: failed to initialize JIT" << std::endl;
                 return true;
             }
 
