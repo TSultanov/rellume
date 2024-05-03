@@ -173,27 +173,22 @@ class TestCase {
         uintptr_t addr = std::stoul(key.substr(1), nullptr, 16);
         size_t value_len = value_str.length() / 2;
 
-        uintptr_t page_size;
-        #ifdef _WIN32
-        {
-            SYSTEM_INFO info;
-            GetSystemInfo(&info);
-            page_size = info.dwPageSize;
-        }
-        #else
-        page_size = sysconf(_SC_PAGE_SIZE);
-        #endif
-
-        uintptr_t paged_addr = addr & -page_size;
-        size_t paged_size = value_len + (addr - paged_addr);
+        size_t paged_size;
 #ifdef _WIN32
-        void* map = VirtualAlloc(reinterpret_cast<void*>(paged_addr), paged_size,
+        void* map = VirtualAlloc(reinterpret_cast<void*>(addr), value_len,
             MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        if (map == nullptr || reinterpret_cast<uintptr_t>(map) != paged_addr) {
+        if (map == nullptr) {
             diagnostic << "# error mapping address 0x" << std::hex << addr << " map=0x" << std::hex << map << " last error 0x" << std::hex << GetLastError() << std::endl;
             return true;
         }
+
+        paged_size = value_len + (addr - reinterpret_cast<uintptr_t>(map));
 #else
+        uintptr_t page_size = sysconf(_SC_PAGE_SIZE);
+
+        uintptr_t paged_addr = addr & -page_size;
+        paged_size = value_len + (addr - paged_addr);
+
         void* map = mmap(reinterpret_cast<void*>(paged_addr), paged_size,
                          PROT_READ|PROT_WRITE,
                          MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE, -1, 0);
