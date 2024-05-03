@@ -348,8 +348,13 @@ class TestCase {
         // to the -O0 JIT configuration).
         if (use_jit) {
             std::vector<const char *> static_libs = {
+#if defined(__aarch64__) || defined(_M_ARM64)
+                "C:/msys64/clangarm64/lib/clang/18/lib/windows/libclang_rt.builtins-aarch64.a",
+                "C:/msys64/clangarm64/lib/libmingwex.a"
+#else
                 "C:/msys64/clang64/lib/clang/18/lib/windows/libclang_rt.builtins-x86_64.a",
                 "C:/msys64/clang64/lib/libmingwex.a"
+#endif
             };
 
             std::vector<const char *> dynamic_libs = {
