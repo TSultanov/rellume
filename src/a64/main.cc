@@ -112,7 +112,7 @@ bool Lifter::Lift(const Instr& inst) {
         LiftBinOp(a64, w32, llvm::Instruction::Sub, BinOpKind::IMM, set_flags);
         break;
     case farmdec::A64_MOVK: {
-        uint64_t clrmask = ~ (0xffffuL << a64.movk.lsl);
+        uint64_t clrmask = ~ (0xffffuLL << a64.movk.lsl);
         uint64_t shiftedimm = static_cast<uint64_t>(a64.movk.imm16) << a64.movk.lsl;
         auto val = GetGp(a64.rd, w32);
         val = irb.CreateAnd(val, irb.getIntN(bits, clrmask));   // clear 16 bits at point of insertion...
@@ -138,7 +138,7 @@ bool Lifter::Lift(const Instr& inst) {
         //     extended = sext_mask | field;
         //     rd = (msb_set) ? extended : field;
         //
-        uint64_t sext_mask = ~0uL << (a64.bfm.lsb + a64.bfm.width - 1);
+        uint64_t sext_mask = ~0uLL << (a64.bfm.lsb + a64.bfm.width - 1);
         auto sext_mask_value = irb.getIntN(bits, sext_mask); // truncates to 32-bit if required
         auto msb_set = irb.CreateICmpNE(irb.CreateAnd(field, sext_mask_value), irb.getIntN(bits, 0));
         auto extended = irb.CreateOr(irb.CreateOr(field, sext_mask_value));
@@ -151,7 +151,7 @@ bool Lifter::Lift(const Instr& inst) {
         auto field = Extract(GetGp(a64.rn, w32), w32, a64.bfm.lsb, a64.bfm.width);
 
         // See above.
-        uint64_t sext_mask = ~0uL << (a64.bfm.width - 1);
+        uint64_t sext_mask = ~0uLL << (a64.bfm.width - 1);
         auto sext_mask_value = irb.getIntN(bits, sext_mask); // truncates to 32-bit if required
         auto msb_set = irb.CreateICmpNE(irb.CreateAnd(field, sext_mask_value), irb.getIntN(bits, 0));
         auto extended = irb.CreateOr(irb.CreateOr(field, sext_mask_value));
@@ -298,7 +298,7 @@ bool Lifter::Lift(const Instr& inst) {
         // glibc and musl want 64-byte blocks, so do exactly that.
         if (a64.sys.op1 == 3 && a64.sys.op2 == 1 && a64.sys.crn == 7 && a64.sys.crm == 4) {
             auto addr = GetGp(a64.rt, /*w32=*/false);                  // may point anywhere into the block
-            auto start = irb.CreateAnd(addr, irb.getInt64(~0x3fuL)); // actual start address of block
+            auto start = irb.CreateAnd(addr, irb.getInt64(~0x3fuLL)); // actual start address of block
             auto ptr = irb.CreateIntToPtr(start, irb.getPtrTy());
             irb.CreateMemSet(ptr, irb.getInt8(0), irb.getInt32(64), llvm::Align(64));
         } else {
@@ -342,7 +342,7 @@ bool Lifter::Lift(const Instr& inst) {
             // We set Architecture to 0b1111 to indicate ARMv8, but we do not implement the feature registers
             // ID_AA64* because they are not commonly read in userspace (the compiler knows the features of
             // the target, so why would the generated code check them?).
-            SetGp(a64.rt, /*w32=*/false, irb.getIntN(64, 0xfuL << 16));
+            SetGp(a64.rt, /*w32=*/false, irb.getIntN(64, 0xfuLL << 16));
             break;
         default:
             goto unhandled;

@@ -227,10 +227,10 @@ public:
         llvm::Value* abs_op = irb.CreateBitCast(LoadFp(rvi->rs1, f), int_ty);
         llvm::Value* sign_op = irb.CreateBitCast(LoadFp(rvi->rs2, f), int_ty);
         if (!keep && zero)
-            abs_op = irb.CreateAnd(abs_op, irb.getIntN(sz, (1ul << (sz-1)) - 1));
+            abs_op = irb.CreateAnd(abs_op, irb.getIntN(sz, (1ull << (sz-1)) - 1));
         else if (!keep && !zero)
-            abs_op = irb.CreateOr(abs_op, irb.getIntN(sz, 1ul << (sz-1)));
-        sign_op = irb.CreateAnd(sign_op, irb.getIntN(sz, 1ul << (sz-1)));
+            abs_op = irb.CreateOr(abs_op, irb.getIntN(sz, 1ull << (sz-1)));
+        sign_op = irb.CreateAnd(sign_op, irb.getIntN(sz, 1ull << (sz-1)));
         abs_op = irb.CreateXor(abs_op, sign_op);
         StoreFp(rvi->rd, irb.CreateBitCast(abs_op, f.Type(irb.getContext())));
     }
@@ -247,7 +247,7 @@ public:
         unsigned nanidx = sz == 32 ? 22 : 51;
 
         // TODO: find a more performant way for FP classification
-        llvm::Value* sign = irb.CreateAnd(v, irb.getIntN(sz, 1ul << (sz-1)));
+        llvm::Value* sign = irb.CreateAnd(v, irb.getIntN(sz, 1ull << (sz-1)));
         llvm::Value* exp = irb.CreateAnd(v, irb.getIntN(sz, expmsk));
         llvm::Value* expzero = irb.CreateICmpEQ(exp, irb.getIntN(sz, 0));
         llvm::Value* expmax = irb.CreateICmpEQ(exp, irb.getIntN(sz, expmsk));
